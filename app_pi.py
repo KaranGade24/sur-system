@@ -78,7 +78,7 @@ def ai_worker():
         
         # 2. Ultra-fast Preprocessing
         # INTER_LINEAR is faster than default cubic resizing
-        img = cv2.resize(frame, (320, 320), interpolation=cv2.INTER_LINEAR)  # ✅ reduced for Pi
+        img = cv2.resize(frame, (640, 640), interpolation=cv2.INTER_LINEAR)  # ✅ reduced for Pi
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         img = img.astype(np.float32) / 255.0
         img = np.transpose(img, (2, 0, 1)) 
@@ -98,7 +98,7 @@ def ai_worker():
             conf = np.max(row[4:])
             if conf > 0.45:
                 cx, cy, w, h = row[0], row[1], row[2], row[3]
-                x_scale, y_scale = orig_w / 320, orig_h / 320
+                x_scale, y_scale = orig_w / 640, orig_h / 640
                 
                 x = int((cx - w / 2) * x_scale)
                 y = int((cy - h / 2) * y_scale)
