@@ -1,3 +1,5 @@
+print("start import")
+
 import cv2
 import numpy as np
 import onnxruntime as ort
@@ -16,6 +18,8 @@ from flask_cors import CORS
 
 # ✅ NEW: Picamera2 import
 from picamera2 import Picamera2
+
+print("import done")
 
 app = Flask(__name__)
 
