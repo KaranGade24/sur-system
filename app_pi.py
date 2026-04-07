@@ -394,6 +394,7 @@ def camera_worker():
         
         # Capture raw frame
         frame_raw = picam2.capture_array()
+        print(frame_raw.shape)
         
         # ✅ FIX: Explicitly convert to 3-channel BGR 
         # This removes the alpha channel that causes color distortion in OpenCV
