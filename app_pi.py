@@ -21,7 +21,7 @@ CORS(app)
 TARGET_FPS    = 10.0   # 10 FPS is the CCTV standard; easy on CPU/RAM
 FRAME_WIDTH   = 640
 FRAME_HEIGHT  = 480
-INFER_SIZE    = 640    # ← KEY: 320 instead of 640 — ~4× faster on ARM CPU
+INFER_SIZE    = 320    # ← KEY: 320 instead of 640 — ~4× faster on ARM CPU
 JPEG_QUALITY  = 60     # Lower = less RAM / network usage; 60 is fine for CCTV
 CONF_THRESH   = 0.45
 NMS_THRESH    = 0.45
@@ -38,6 +38,7 @@ latest_detections = []     # Bounding boxes from AI thread
 latest_has_fire   = False
 latest_jpeg       = None   # Pre-encoded JPEG → served directly to browsers
 
+
 # ─────────────────────────────────────────────
 # ONNX MODEL LOAD
 # ─────────────────────────────────────────────
@@ -51,6 +52,7 @@ try:
 except Exception as e:
     print(f"❌ Failed to load model: {e}")
     sys.exit(1)
+
 
 # ─────────────────────────────────────────────
 # CAMERA HELPER — supports Pi Camera + USB cam
@@ -69,7 +71,7 @@ def open_camera():
             def __init__(self):
                 self.cam = Picamera2()
                 cfg = self.cam.create_video_configuration(
-                    main={"size": (FRAME_WIDTH, FRAME_HEIGHT), "format": "BGR888"},  # ← Changed to BGR888
+                    main={"size": (FRAME_WIDTH, FRAME_HEIGHT), "format": "RGB888"},
                     controls={"FrameRate": TARGET_FPS}
                 )
                 self.cam.configure(cfg)
@@ -78,8 +80,8 @@ def open_camera():
 
             def read(self):
                 frame = self.cam.capture_array()
-                # picamera2 with BGR888 already gives BGR for OpenCV
-                return True, frame  # ← Removed cv2.cvtColor, no conversion needed
+                # picamera2 gives RGB — convert to BGR for OpenCV
+                return True, cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
 
             def release(self):
                 self.cam.stop()
@@ -110,6 +112,7 @@ def open_camera():
     print("❌ No camera found.")
     sys.exit(1)
 
+
 # ─────────────────────────────────────────────
 # AI WORKER THREAD
 # Runs inference in the background so camera
@@ -134,7 +137,7 @@ def ai_worker():
         # INFER_SIZE=320 is ~4× faster than 640 on ARM; still good accuracy
         img = cv2.resize(frame, (INFER_SIZE, INFER_SIZE),
                          interpolation=cv2.INTER_LINEAR)
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)  # Model expects RGB
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         img = img.astype(np.float32) / 255.0
         img = np.transpose(img, (2, 0, 1))
         img = np.expand_dims(img, axis=0)
@@ -183,6 +186,7 @@ def ai_worker():
 
         # Brief rest to avoid thermal throttling on Pi
         time.sleep(0.02)
+
 
 # ─────────────────────────────────────────────
 # CAMERA WORKER THREAD
@@ -243,6 +247,7 @@ def camera_worker():
         if sleep_time > 0:
             time.sleep(sleep_time)
 
+
 # ─────────────────────────────────────────────
 # FLASK ROUTES
 # ─────────────────────────────────────────────
@@ -267,6 +272,7 @@ def video_feed():
         generate(),
         mimetype='multipart/x-mixed-replace; boundary=frame'
     )
+
 
 @app.route('/')
 def index():
@@ -308,6 +314,7 @@ def index():
   <footer>Powered by YOLOv8 ONNX · Raspberry Pi</footer>
 </body>
 </html>"""
+
 
 # ─────────────────────────────────────────────
 # CLOUDFLARE TUNNEL
@@ -359,6 +366,7 @@ def start_cloudflare_tunnel(port=5000):
 
     threading.Thread(target=run, daemon=True).start()
 
+
 # ─────────────────────────────────────────────
 # GRACEFUL SHUTDOWN
 # ─────────────────────────────────────────────
@@ -368,6 +376,7 @@ def signal_handler(sig, frame):
 
 signal.signal(signal.SIGINT,  signal_handler)
 signal.signal(signal.SIGTERM, signal_handler)
+
 
 # ─────────────────────────────────────────────
 # ENTRY POINT
