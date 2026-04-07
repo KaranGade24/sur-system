@@ -23,8 +23,8 @@ FRAME_WIDTH   = 640
 FRAME_HEIGHT  = 480
 INFER_SIZE    = 640    # ← KEY: 320 instead of 640 — ~4× faster on ARM CPU
 JPEG_QUALITY  = 60     # Lower = less RAM / network usage; 60 is fine for CCTV
-CONF_THRESH   = 0.30
-NMS_THRESH    = 0.30
+CONF_THRESH   = 0.10
+NMS_THRESH    = 0.10
 
 # Limit OpenCV threads so they don't fight with Flask/AI threads on Pi's cores
 cv2.setNumThreads(2)
