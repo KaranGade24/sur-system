@@ -69,8 +69,8 @@ def open_camera():
             def __init__(self):
                 self.cam = Picamera2()
                 cfg = self.cam.create_video_configuration(
-                    main={"size": (FRAME_WIDTH, FRAME_HEIGHT), "format": "RGB888"},  # picamera2 returns RGB
-                    controls={"FrameRate": TARGET_FPS, "AwbEnable": True}  # Enable auto white balance
+                    main={"size": (FRAME_WIDTH, FRAME_HEIGHT), "format": "BGR888"},  # ← Changed to BGR888
+                    controls={"FrameRate": TARGET_FPS}
                 )
                 self.cam.configure(cfg)
                 self.cam.start()
@@ -78,8 +78,8 @@ def open_camera():
 
             def read(self):
                 frame = self.cam.capture_array()
-                # picamera2 gives RGB — convert to BGR for OpenCV + model
-                return True, cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+                # picamera2 with BGR888 already gives BGR for OpenCV
+                return True, frame  # ← Removed cv2.cvtColor, no conversion needed
 
             def release(self):
                 self.cam.stop()
@@ -134,7 +134,7 @@ def ai_worker():
         # INFER_SIZE=320 is ~4× faster than 640 on ARM; still good accuracy
         img = cv2.resize(frame, (INFER_SIZE, INFER_SIZE),
                          interpolation=cv2.INTER_LINEAR)
-        # NOTE: No BGR->RGB here. Most custom YOLOv8 ONNX models expect BGR.
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)  # Model expects RGB
         img = img.astype(np.float32) / 255.0
         img = np.transpose(img, (2, 0, 1))
         img = np.expand_dims(img, axis=0)
@@ -274,41 +274,38 @@ def index():
 <html>
 <head>
   <title>🔥 Fire Detector — Live</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body {
-      background: #000;
+    body {
+      background: #111;
       color: #eee;
       font-family: 'Segoe UI', sans-serif;
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 16px;
+      min-height: 100vh;
     }
+    h1 { font-size: 1.3rem; margin-bottom: 12px; letter-spacing: 1px; }
     #feed {
-      width: 100vw;
-      height: 100vh;
-      object-fit: contain;
+      width: 100%;
+      max-width: 640px;
+      border: 2px solid #333;
+      border-radius: 10px;
       display: block;
-      background: #000;
     }
-    .overlay {
-      position: fixed;
-      top: 12px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: rgba(0,0,0,0.6);
-      padding: 6px 14px;
-      border-radius: 20px;
-      font-size: 0.9rem;
-      letter-spacing: 1px;
-      backdrop-filter: blur(4px);
+    footer {
+      margin-top: 12px;
+      font-size: 0.75rem;
+      color: #555;
     }
   </style>
 </head>
 <body>
-  <div class="overlay">🟢 Fire Detection — Live</div>
+  <h1>🟢 Fire Detection — Live Stream</h1>
   <img id="feed" src="/video_feed" alt="Live feed">
+  <footer>Powered by YOLOv8 ONNX · Raspberry Pi</footer>
 </body>
 </html>"""
 
