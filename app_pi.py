@@ -333,7 +333,7 @@ def ai_worker():
 
         orig_h, orig_w = frame.shape[:2]
         img = cv2.resize(frame, (640, 640), interpolation=cv2.INTER_LINEAR)
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        #img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         img = img.astype(np.float32) / 255.0
         img = np.transpose(img, (2, 0, 1))
         img = np.expand_dims(img, axis=0)
@@ -376,7 +376,7 @@ def camera_worker():
     picam2 = Picamera2()
     
     # Use 'video' role which is better for real-time streaming
-    config = picam2.create_video_configuration(main={"size": (FRAME_WIDTH, FRAME_HEIGHT)})
+    config = picam2.create_video_configuration(main={"size": (FRAME_WIDTH, FRAME_HEIGHT), "format": "RGB888"})
     picam2.configure(config)
     
     # Start Camera
@@ -398,7 +398,7 @@ def camera_worker():
         # ✅ FIX: Explicitly convert to 3-channel BGR 
         # This removes the alpha channel that causes color distortion in OpenCV
         if frame_raw.shape[2] == 4:
-            frame = cv2.cvtColor(frame_raw, cv2.COLOR_BGRA2BGR)
+            frame = cv2.cvtColor(frame_raw, cv2.COLOR_RGB2BGR)
         else:
             frame = frame_raw
 
