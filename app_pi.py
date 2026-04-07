@@ -260,7 +260,6 @@
     
 #     app.run(host='0.0.0.0', port=5000, threaded=True, use_reloader=False)
 
-
 import cv2
 import numpy as np
 import onnxruntime as ort
@@ -274,10 +273,9 @@ import os
 import signal
 import sys
 import re
-from datetime import datetime
 from picamera2 import Picamera2
 
-print("🚀 Starting AI Surveillance System (Cloudflare + Stream Mode)...")
+print("🚀 Starting AI Surveillance (Natural Color Fix)...")
 
 app = Flask(__name__)
 CORS(app)
@@ -286,69 +284,45 @@ CORS(app)
 TARGET_FPS = 12.0
 FRAME_WIDTH = 640
 FRAME_HEIGHT = 480
+DETECTION_THRESHOLD = 0.45 # Balanced sensitivity
 
-# --- Global State for Threading ---
+# --- Global State ---
 frame_lock = threading.Lock()
-raw_frame_for_ai = None      # Shared frame for AI worker
-latest_detections = []       # Results from AI
-latest_has_fire = False      # Fire status
-latest_jpeg = None           # Encoded image for web stream
+raw_frame_for_ai = None
+latest_detections = []
+latest_has_fire = False
+latest_jpeg = None
 
-# --- AI Setup (ONNX Optimized) ---
+# --- AI Setup ---
 providers = ['CPUExecutionProvider']
 try:
     so = ort.SessionOptions()
     so.intra_op_num_threads = 2
-    so.inter_op_num_threads = 1
     session = ort.InferenceSession("fire_detector.onnx", sess_options=so, providers=providers)
     input_name = session.get_inputs()[0].name
-    print("🧠 AI Model Loaded Successfully.")
 except Exception as e:
-    print(f"❌ Failed to load model: {e}")
+    print(f"❌ Model Error: {e}")
     sys.exit(1)
 
-# --- Cloudflare Tunnel Logic ---
+# --- Cloudflare Tunnel ---
 def start_cloudflare_background(port=5000):
-    """Starts cloudflared in a background thread and prints the public URL."""
     def run():
-        print("🌍 Initializing Cloudflare Tunnel...")
         path = shutil.which("cloudflared")
-        
-        # Search common paths if not in PATH
-        if not path:
-            candidates = ["/usr/local/bin/cloudflared", "/usr/bin/cloudflared", "/snap/bin/cloudflared"]
-            for c in candidates:
-                if os.path.exists(c):
-                    path = c
-                    break
-        
-        if not path:
-            print("⚠️ Cloudflared not found. Local only mode.")
-            return
-
+        if not path: return
         process = subprocess.Popen(
             [path, "tunnel", "--url", f"http://localhost:{port}", "--no-autoupdate"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
         )
-
         for line in process.stdout:
             if "trycloudflare.com" in line:
                 match = re.search(r"https?://[^\s']+", line)
                 if match:
-                    print("\n" + "="*60)
-                    print(f"✅ PUBLIC ACCESS AT: {match.group(0)}")
-                    print("="*60 + "\n")
-
+                    print(f"\n✅ PUBLIC URL: {match.group(0)}\n")
     threading.Thread(target=run, daemon=True).start()
 
-# --- Worker Threads ---
-
+# --- AI Worker ---
 def ai_worker():
-    """Background thread that handles AI inference to keep video smooth."""
     global raw_frame_for_ai, latest_detections, latest_has_fire
-    
     while True:
         with frame_lock:
             frame = raw_frame_for_ai.copy() if raw_frame_for_ai is not None else None
@@ -358,101 +332,102 @@ def ai_worker():
             continue
 
         orig_h, orig_w = frame.shape[:2]
-        
-        # Ultra-fast Preprocessing
         img = cv2.resize(frame, (640, 640), interpolation=cv2.INTER_LINEAR)
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         img = img.astype(np.float32) / 255.0
-        img = np.transpose(img, (2, 0, 1)) 
-        img = np.expand_dims(img, axis=0)  
+        img = np.transpose(img, (2, 0, 1))
+        img = np.expand_dims(img, axis=0)
 
-        # Run Inference
         outputs = session.run(None, {input_name: img})
         out = outputs[0][0]
         if out.shape[0] < out.shape[1]: out = out.T
 
-        boxes, confidences = [], []
-        current_detections = []
+        boxes, confs = [], []
+        temp_detections = []
         has_fire = False
 
         for row in out:
             conf = np.max(row[4:])
-            if conf > 0.50:
+            if conf > DETECTION_THRESHOLD:
                 cx, cy, w, h = row[0:4]
                 x_scale, y_scale = orig_w / 640, orig_h / 640
-                
                 x = int((cx - w / 2) * x_scale)
                 y = int((cy - h / 2) * y_scale)
                 bw, bh = int(w * x_scale), int(h * y_scale)
-
                 boxes.append([x, y, bw, bh])
-                confidences.append(float(conf))
+                confs.append(float(conf))
 
-        indices = cv2.dnn.NMSBoxes(boxes, confidences, 0.5, 0.45)
-
+        indices = cv2.dnn.NMSBoxes(boxes, confs, DETECTION_THRESHOLD, 0.45)
         if len(indices) > 0:
             has_fire = True
             for i in indices.flatten():
-                current_detections.append({"box": boxes[i], "conf": confidences[i]})
+                temp_detections.append({"box": boxes[i], "conf": confs[i]})
 
-        # Sync back to global state
         with frame_lock:
-            latest_detections = current_detections
+            latest_detections = temp_detections
             latest_has_fire = has_fire
-            
         time.sleep(0.01)
 
+# --- Camera Worker ---
 def camera_worker():
-    """Handles Picamera2 capture and web stream encoding."""
     global raw_frame_for_ai, latest_jpeg
     
+    # ✅ FIX: Initialize camera with Neutral White Balance to remove "Blue tint"
     picam2 = Picamera2()
-    config = picam2.create_preview_configuration(main={"size": (FRAME_WIDTH, FRAME_HEIGHT)})
+    
+    # Use 'video' role which is better for real-time streaming
+    config = picam2.create_video_configuration(main={"size": (FRAME_WIDTH, FRAME_HEIGHT)})
     picam2.configure(config)
+    
+    # Start Camera
     picam2.start()
     
-    print("🎥 Camera Engine Active.")
+    # ✅ Set AWB Mode to 'auto' or 'indoor' to fix color issues
+    # If it is still blue, you can try: picam2.set_controls({"AwbMode": 1}) 
+    picam2.set_controls({"AwbMode": 0}) # 0 is Auto
+    
+    print("🎥 Camera Active (Color Correction Applied).")
     frame_duration = 1.0 / TARGET_FPS
 
     while True:
         start_time = time.time()
-
-        # 1. Capture and Fix Channel Issue (Convert BGRA to BGR)
+        
+        # Capture raw frame
         frame_raw = picam2.capture_array()
+        
+        # ✅ FIX: Explicitly convert to 3-channel BGR 
+        # This removes the alpha channel that causes color distortion in OpenCV
         if frame_raw.shape[2] == 4:
             frame = cv2.cvtColor(frame_raw, cv2.COLOR_BGRA2BGR)
         else:
             frame = frame_raw
 
-        # 2. Update AI input and grab results
         with frame_lock:
             raw_frame_for_ai = frame.copy()
             current_detections = latest_detections
             current_has_fire = latest_has_fire
 
-        # 3. Draw Detections
+        # Draw Annotations
         if current_has_fire:
             for det in current_detections:
                 x, y, w, h = det["box"]
-                conf = det["conf"]
                 cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 0, 255), 2)
-                cv2.putText(frame, f"FIRE {conf:.2f}", (x, y-10), 
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+                cv2.putText(frame, f"FIRE {det['conf']:.2f}", (x, y-10),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
 
-        # 4. Encode to JPEG (Low quality = High speed)
-        ret, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
+        # Encode for web
+        ret, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 75])
         if ret:
             with frame_lock:
                 latest_jpeg = buffer.tobytes()
 
-        # 5. Maintain steady frame rate
+        # Strict FPS Control
         elapsed = time.time() - start_time
         sleep_time = frame_duration - elapsed
         if sleep_time > 0:
             time.sleep(sleep_time)
 
-# --- Flask Routes ---
-
+# --- Flask ---
 @app.route('/video_feed')
 def video_feed():
     def generate():
@@ -460,37 +435,16 @@ def video_feed():
             with frame_lock:
                 jpeg = latest_jpeg
             if jpeg:
-                yield (b'--frame\r\n'
-                       b'Content-Type: image/jpeg\r\n\r\n' + jpeg + b'\r\n')
-            time.sleep(1.0 / TARGET_FPS)
+                yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + jpeg + b'\r\n')
+            time.sleep(0.04)
     return Response(generate(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 @app.route('/')
 def index():
-    return """
-    <html>
-    <head><title>Fire AI Live</title><meta name="viewport" content="width=device-width, initial-scale=1"></head>
-    <body style="background:#111; display:flex; justify-content:center; align-items:center; height:100vh; margin:0; color:white; font-family:sans-serif; flex-direction:column;">
-        <h2 style="margin-bottom:10px;">🔥 Live AI Detection</h2>
-        <img src="/video_feed" style="width:95%; max-width:640px; border:4px solid #333; border-radius:12px; box-shadow: 0 0 20px rgba(255,0,0,0.2);">
-        <p style="margin-top:10px; color:#888;">Cloudflare Tunnel Active</p>
-    </body>
-    </html>
-    """
-
-def signal_handler(sig, frame):
-    print("\n🛑 Shutting down safely...")
-    sys.exit(0)
-
-signal.signal(signal.SIGINT, signal_handler)
+    return '<body style="background:#000; display:flex; justify-content:center;"><img src="/video_feed" style="height:90vh;"></body>'
 
 if __name__ == '__main__':
-    # 1. Start Cloudflare Tunnel
     start_cloudflare_background(port=5000)
-    
-    # 2. Start Worker Threads
     threading.Thread(target=ai_worker, daemon=True).start()
     threading.Thread(target=camera_worker, daemon=True).start()
-    
-    # 3. Start Flask Web Server
     app.run(host='0.0.0.0', port=5000, threaded=True, use_reloader=False)
