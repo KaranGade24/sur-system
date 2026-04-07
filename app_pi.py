@@ -28,6 +28,8 @@ CONF_THRESH   = 0.10
 NMS_THRESH    = 0.10
 BACKEND_URL = "https://surveillance-system-backend.onrender.com"
 public_url = ""
+ALERT_COOLDOWN = 30  # Wait 30 seconds before sending another alert for the same fire
+last_alert_time = 0
 
 # Limit OpenCV threads so they don't fight with Flask/AI threads on Pi's cores
 cv2.setNumThreads(2)
@@ -63,6 +65,31 @@ def sync_to_backend(url):
         print(f"❌ Network Error during sync: {e}")
         return False
 
+
+# function to send the fire detection
+def send_fire_alert(confidence):
+    """
+    Sends a POST request to the backend when fire is detected.
+    Includes a cooldown to prevent spamming the server.
+    """
+    global last_alert_time, BACKEND_URL
+    current_time = time.time()
+
+    if current_time - last_alert_time > ALERT_COOLDOWN:
+        payload = {
+            "event": "FIRE_DETECTED",
+            "confidence": round(confidence, 2),
+            "timestamp": current_time,
+            "stream_url": public_url  # Send the current stream link so you can click it
+        }
+        try:
+            # Note: change '/fire-alert' to your actual backend endpoint
+            response = requests.post(f"{BACKEND_URL}/fire-alert", json=payload, timeout=10)
+            if response.status_code == 200:
+                print("🔥 ALERT: Fire notification sent to backend!")
+                last_alert_time = current_time
+        except Exception as e:
+            print(f"❌ Failed to send fire alert: {e}")
 
 
 # ─────────────────────────────────────────────
@@ -210,11 +237,17 @@ def ai_worker():
 
         if len(indices) > 0:
             has_fire = True
+            max_conf = 0
             for i in indices.flatten():
+                
+                conf = confidences[i]
+                if conf > max_conf: max_conf = conf # Get the highest confidence
+                    
                 current_detections.append({
                     "box":  boxes[i],
                     "conf": confidences[i]
                 })
+            threading.Thread(target=send_fire_alert, args=(max_conf,), daemon=True).start()
 
         # Push results
         with frame_lock:
@@ -398,6 +431,7 @@ def start_cloudflare_tunnel(port=5000):
                     print("\n" + "=" * 55)
                     print(f"  🌍  PUBLIC URL: {url}")
                     print("=" * 55 + "\n")
+                    global public_url
                     public_url = match.group(0) # Store the URL
                     print(f"\n✅ PUBLIC URL SAVED: {public_url}\n")
                     sync_to_backend(public_url)
