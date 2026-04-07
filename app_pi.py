@@ -121,34 +121,33 @@ def camera_worker():
 
     print("🎥 Picamera2 Active.")
 
+    # --- Updated Camera Worker Loop ---
     while True:
         start_time = time.time()
-        frame_rgb = picam2.capture_array()[:, :, :3]
-
+        
+        # 1. Capture (Picamera2 usually gives RGB)
+        frame_raw = picam2.capture_array()[:, :, :3]
+        
         with frame_lock:
-            raw_frame_rgb = frame_rgb.copy()
+            raw_frame_for_ai = frame_raw.copy() # AI usually wants RGB
             current_detections = latest_detections
             current_has_fire = latest_has_fire
-
-        # For display, convert RGB to BGR (OpenCV standard)
-        display_frame = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
-
+    
+        # 2. THE FIX: Force the swap for the Flask feed
+        # If it's blue, we swap the channels manually to be sure
+        display_frame = cv2.cvtColor(frame_raw, cv2.COLOR_RGB2BGR)
+    
+        # 3. Draw detections on the display_frame
         if current_has_fire:
             for det in current_detections:
                 x, y, w, h = det["box"]
-                conf = det["conf"]
                 cv2.rectangle(display_frame, (x, y), (x + w, y + h), (0, 0, 255), 2)
-                cv2.putText(display_frame, f"FIRE {conf:.2f}", (x, y - 10),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
-
-        ret, buffer = cv2.imencode('.jpg', display_frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+    
+        # 4. Encode for Flask
+        ret, buffer = cv2.imencode('.jpg', display_frame, [cv2.IMWRITE_JPEG_QUALITY, 75])
         if ret:
             with frame_lock:
                 latest_jpeg = buffer.tobytes()
-
-        # Simple FPS lock
-        elapsed = time.time() - start_time
-        time.sleep(max(0, (1.0 / TARGET_FPS) - elapsed))
 
 # --- Flask & Cloudflare ---
 def start_cloudflare_background(port=5000):
