@@ -21,7 +21,7 @@ CORS(app)
 TARGET_FPS    = 10.0   # 10 FPS is the CCTV standard; easy on CPU/RAM
 FRAME_WIDTH   = 640
 FRAME_HEIGHT  = 480
-INFER_SIZE    = 320    # ← KEY: 320 instead of 640 — ~4× faster on ARM CPU
+INFER_SIZE    = 640    # ← KEY: 320 instead of 640 — ~4× faster on ARM CPU
 JPEG_QUALITY  = 60     # Lower = less RAM / network usage; 60 is fine for CCTV
 CONF_THRESH   = 0.45
 NMS_THRESH    = 0.45
@@ -71,7 +71,7 @@ def open_camera():
             def __init__(self):
                 self.cam = Picamera2()
                 cfg = self.cam.create_video_configuration(
-                    main={"size": (FRAME_WIDTH, FRAME_HEIGHT), "format": "RGB888"},
+                    main={"size": (FRAME_WIDTH, FRAME_HEIGHT), "format": "BGR888"},
                     controls={"FrameRate": TARGET_FPS}
                 )
                 self.cam.configure(cfg)
@@ -99,6 +99,7 @@ def open_camera():
         pass   # picamera2 not available → fall through to OpenCV
 
     # 2. Fall back to USB webcam via OpenCV
+    print("open cv fallback")
     for idx in [0, 1, 2]:
         cap = cv2.VideoCapture(idx)
         if cap.isOpened():
