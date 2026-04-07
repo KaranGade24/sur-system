@@ -11,6 +11,7 @@ import signal
 import sys
 import re
 from flask_cors import CORS
+import requests
 
 app = Flask(__name__)
 CORS(app)
@@ -25,9 +26,44 @@ INFER_SIZE    = 640    # ← KEY: 320 instead of 640 — ~4× faster on ARM CPU
 JPEG_QUALITY  = 60     # Lower = less RAM / network usage; 60 is fine for CCTV
 CONF_THRESH   = 0.10
 NMS_THRESH    = 0.10
+BACKEND_URL = "https://surveillance-system-backend.onrender.com"
+public_url = ""
 
 # Limit OpenCV threads so they don't fight with Flask/AI threads on Pi's cores
 cv2.setNumThreads(2)
+
+
+
+#funtion to send cloudflare link to backend
+
+def sync_to_backend(url):
+    """
+    Sends the generated Cloudflare URL to the Render backend.
+    """
+    global BACKEND_URL
+    
+    payload = {
+        "url": url,
+        "timestamp": time.time()
+    }
+    
+    try:
+        print(f"📡 Syncing to Render: {url}...")
+        # We use a longer timeout (20s) because Render free tier needs time to spin up
+        response = requests.post(f"{BACKEND_URL}/update-link", json=payload, timeout=20)
+        
+        if response.status_code == 200:
+            print("✅ Backend Sync Successful.")
+            return True
+        else:
+            print(f"⚠️ Backend Sync Failed (Status: {response.status_code})")
+            return False
+            
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Network Error during sync: {e}")
+        return False
+
+
 
 # ─────────────────────────────────────────────
 # GLOBAL SHARED STATE
@@ -362,6 +398,9 @@ def start_cloudflare_tunnel(port=5000):
                     print("\n" + "=" * 55)
                     print(f"  🌍  PUBLIC URL: {url}")
                     print("=" * 55 + "\n")
+                    public_url = match.group(0) # Store the URL
+                    print(f"\n✅ PUBLIC URL SAVED: {public_url}\n")
+                    sync_to_backend(public_url)
             # Uncomment below to see all tunnel logs (useful for debugging):
             # print("[cloudflared]", line.strip())
 
