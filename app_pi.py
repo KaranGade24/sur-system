@@ -332,7 +332,7 @@ def ai_worker():
             continue
 
         orig_h, orig_w = frame.shape[:2]
-        img = cv2.resize(frame, (640, 640), interpolation=cv2.INTER_LINEAR)
+        img = cv2.resize(frame, (640, 640))
         #img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         img = img.astype(np.float32) / 255.0
         img = np.transpose(img, (2, 0, 1))
@@ -399,7 +399,7 @@ def camera_worker():
         # ✅ FIX: Explicitly convert to 3-channel BGR 
         # This removes the alpha channel that causes color distortion in OpenCV
         if frame_raw.shape[2] == 4:
-            frame = cv2.cvtColor(frame_raw, cv2.COLOR_RGB2BGR)
+            frame = frame_raw[:, :, :3]
         else:
             frame = frame_raw
 
@@ -412,12 +412,14 @@ def camera_worker():
         if current_has_fire:
             for det in current_detections:
                 x, y, w, h = det["box"]
-                cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 0, 255), 2)
+                cv2.rectangle(frame, (x, y), (x + w, y + h), (255, 0, 0), 2)
                 cv2.putText(frame, f"FIRE {det['conf']:.2f}", (x, y-10),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
 
         # Encode for web
-        ret, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 75])
+        frame_to_encode = frame[:, :, ::-1]  # RGB → BGR (FASTEST method)
+        
+        ret, buffer = cv2.imencode('.jpg', frame_to_encode, [cv2.IMWRITE_JPEG_QUALITY, 75])
         if ret:
             with frame_lock:
                 latest_jpeg = buffer.tobytes()
