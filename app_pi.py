@@ -26,7 +26,8 @@ INFER_SIZE    = 640    # ← KEY: 320 instead of 640 — ~4× faster on ARM CPU
 JPEG_QUALITY  = 60     # Lower = less RAM / network usage; 60 is fine for CCTV
 CONF_THRESH   = 0.10
 NMS_THRESH    = 0.10
-BACKEND_URL = "https://surveillance-system-backend.onrender.com"
+#BACKEND_URL = "https://surveillance-system-backend.onrender.com"
+BACKEND_URL = "http://5000-firebase-survillancesystem-1762004374655.cluster-cd3bsnf6r5bemwki2bxljme5as.cloudworkstations.dev"
 public_url = ""
 ALERT_COOLDOWN = 30  # Wait 30 seconds before sending another alert for the same fire
 last_alert_time = 0
