@@ -22,7 +22,7 @@ CORS(app)
 TARGET_FPS    = 10.0   # 10 FPS is the CCTV standard; easy on CPU/RAM
 FRAME_WIDTH   = 640
 FRAME_HEIGHT  = 480
-INFER_SIZE    = 640    # ← KEY: 320 instead of 640 — ~4× faster on ARM CPU
+INFER_SIZE    = 640    
 JPEG_QUALITY  = 60     # Lower = less RAM / network usage; 60 is fine for CCTV
 CONF_THRESH   = 0.30
 NMS_THRESH    = 0.30
@@ -91,6 +91,28 @@ def send_fire_alert(confidence):
                 last_alert_time = current_time
         except Exception as e:
             print(f"❌ Failed to send fire alert: {e}")
+
+
+
+# funtion to detect is fire color for more accuracy and avoid bias annotations
+
+def is_fire_color(frame, box):
+    x, y, w, h = box
+    roi = frame[max(0,y):y+h, max(0,x):x+w]
+
+    if roi.size == 0:
+        return False
+
+    hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+
+    # Fire color range
+    lower = np.array([0, 100, 100])
+    upper = np.array([35, 255, 255])
+
+    mask = cv2.inRange(hsv, lower, upper)
+    fire_ratio = np.sum(mask > 0) / (mask.size)
+
+    return fire_ratio > 0.1  # adjust threshold
 
 
 # ─────────────────────────────────────────────
@@ -238,18 +260,47 @@ def ai_worker():
         # NMS
         indices = cv2.dnn.NMSBoxes(boxes, confidences, CONF_THRESH, NMS_THRESH)
 
-        if len(indices) > 0:
-            has_fire = True
-            max_conf = 0
-            for i in indices.flatten():
+        # if len(indices) > 0:
+        #     has_fire = True
+        #     max_conf = 0
+        #     for i in indices.flatten():
                 
-                conf = confidences[i]
-                if conf > max_conf: max_conf = conf # Get the highest confidence
+        #         conf = confidences[i]
+        #         if conf > max_conf: max_conf = conf # Get the highest confidence
                     
-                current_detections.append({
-                    "box":  boxes[i],
-                    "conf": confidences[i]
-                })
+        #         # current_detections.append({
+        #         #     "box":  boxes[i],
+        #         #     "conf": confidences[i]
+        #         # })
+
+        #         if is_fire_color(frame, boxes[i]):
+        #             current_detections.append({
+        #                 "box": boxes[i],
+        #                 "conf": confidences[i]
+        #             })
+
+            
+        #     threading.Thread(target=send_fire_alert, args=(max_conf,), daemon=True).start()
+
+        max_conf = 0
+
+        if len(indices) > 0:
+            for i in indices.flatten():
+                conf = confidences[i]
+                if conf > max_conf:
+                    max_conf = conf
+        
+                if is_fire_color(frame, boxes[i]):
+                    current_detections.append({
+                        "box": boxes[i],
+                        "conf": confidences[i]
+                    })
+        
+        # ✅ SET has_fire AFTER filtering
+        has_fire = len(current_detections) > 0
+        
+        # ✅ Send alert only if real fire detected
+        if has_fire:
             threading.Thread(target=send_fire_alert, args=(max_conf,), daemon=True).start()
 
         # Push results
