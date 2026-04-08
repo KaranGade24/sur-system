@@ -245,9 +245,7 @@ def ai_worker():
         y_scale = orig_h / INFER_SIZE
 
         for row in out:
-            objectness = row[4]
-            class_score = np.max(row[5:])
-            conf = float(objectness * class_score)
+            conf = float(np.max(row[4:]))
             if conf > CONF_THRESH:
                 cx, cy, w, h = row[0], row[1], row[2], row[3]
                 x  = int((cx - w / 2) * x_scale)
