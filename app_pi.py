@@ -24,8 +24,8 @@ FRAME_WIDTH   = 640
 FRAME_HEIGHT  = 480
 INFER_SIZE    = 640    # ← KEY: 320 instead of 640 — ~4× faster on ARM CPU
 JPEG_QUALITY  = 60     # Lower = less RAM / network usage; 60 is fine for CCTV
-CONF_THRESH   = 0.10
-NMS_THRESH    = 0.10
+CONF_THRESH   = 0.30
+NMS_THRESH    = 0.30
 #BACKEND_URL = "https://surveillance-system-backend.onrender.com"
 BACKEND_URL = "https://5000-firebase-survillancesystem-1762004374655.cluster-cd3bsnf6r5bemwki2bxljme5as.cloudworkstations.dev"
 public_url = ""
