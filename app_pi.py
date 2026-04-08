@@ -13,10 +13,6 @@ import re
 from flask_cors import CORS
 import requests
 
-import logging
-
-log = logging.getLogger('werkzeug')
-log.setLevel(logging.ERROR)   # Only show errors, hide GET logs
 
 app = Flask(__name__)
 CORS(app)
