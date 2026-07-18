@@ -120,19 +120,23 @@ It provides:
 
 For detailed hardware instructions, open [esp-code/Readme.md](esp-code/Readme.md).
 
-<!--
 ## Screenshots
 
-Screenshots for the client-side UI can be added to an `images/` folder in this repository when available.
+The following images are already available in the project images folder:
 
-Example placeholder:
+- System block diagram
+- Project flow chart
+- Project circuit diagram
 
-```text
-images/
-├── home-page.png
-├── live-stream.png
-└── alert-demo.png
-``` -->
+### Available images
+
+![Block diagram](images/Block-daigram.png)
+
+![Flow chart](images/flow-chart.png)
+
+![Project circuit diagram](images/project_Circuit-diagram.jpg)
+
+![Project chart](images/project-chart.jpg)
 
 ## Notes
 
